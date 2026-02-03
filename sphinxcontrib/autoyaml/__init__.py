@@ -203,8 +203,8 @@ class AutoYAMLDirective(Directive):
                     # Accumulate root-level items in a list
                     if node.parent.comment is None:
                         node.parent.comment = []
-                    if not isinstance(node.parent.comment, list):
-                        # Convert to list if needed
+                    elif not isinstance(node.parent.comment, list):
+                        # Convert to list, preserving existing item
                         node.parent.comment = [node.parent.comment]
                     node.parent.comment.append(node.comment)
             else:
@@ -224,7 +224,8 @@ class AutoYAMLDirective(Directive):
                         node.parent.comment = nodes.definition_list()
                     elif not isinstance(node.parent.comment, nodes.definition_list):
                         # Check if parent is a root-level key (will be converted to function directive)
-                        if node.parent.parent.parent is None:
+                        # Need to check parent.parent exists before accessing parent.parent.parent
+                        if node.parent.parent and node.parent.parent.parent is None:
                             # Parent is root-level, don't convert its ViewList - just create new definition_list
                             node.parent.comment = nodes.definition_list()
                         else:
