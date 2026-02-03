@@ -23,6 +23,7 @@ class TreeNode:
         self.parent = parent
         self.children = []
         self.comments = comments
+        self.variables = {}  # Store variables for this node
         if value is None:
             self.comment = None
         else:
@@ -124,6 +125,19 @@ class AutoYAMLDirective(Directive):
                     # well, but it's currently not handled.
                     if not isinstance(node_key, ScalarNode):
                         continue
+                    
+                    # Check if this is a 'variables' key - if so, extract variable info
+                    if node_key.value == 'variables' and isinstance(node_value, MappingNode):
+                        # Store variable names and values in the parent tree node
+                        for var_key, var_value in node_value.value:
+                            if isinstance(var_key, ScalarNode):
+                                var_name = var_key.value
+                                # Try to get the default value if it's a scalar
+                                var_default = None
+                                if isinstance(var_value, ScalarNode):
+                                    var_default = var_value.value
+                                tree.variables[var_name] = var_default
+                    
                     subtree = tree.add_child(node_key)
                 for i in (node_key, node_value):
                     if isinstance(i, ScalarNode):
@@ -189,11 +203,12 @@ class AutoYAMLDirective(Directive):
             if variables_info:
                 viewlist.append("", source_file, line_num)
                 for var_name, var_value in variables_info.items():
-                    # Add parameter documentation
-                    param_line = f"   :param {var_name}:"
-                    if var_value:
-                        if isinstance(var_value, str):
-                            param_line += f" {var_value}"
+                    # Add parameter documentation with default value
+                    if var_value is not None:
+                        # Show default value
+                        param_line = f"   :param {var_name}: (default: ``{var_value}``)"
+                    else:
+                        param_line = f"   :param {var_name}:"
                     viewlist.append(param_line, source_file, line_num)
             
             # Parse the ViewList content into the section
@@ -243,23 +258,7 @@ class AutoYAMLDirective(Directive):
     
     def _extract_variables(self, node):
         """Extract variables from a YAML node to create parameter documentation."""
-        variables = {}
-        
-        # Look for a 'variables' child node
-        for child in node.children:
-            if child.value and hasattr(child.value, 'value') and child.value.value == 'variables':
-                # This is the variables section
-                for var_child in child.children:
-                    if var_child.value and hasattr(var_child.value, 'value'):
-                        var_name = var_child.value.value
-                        # Try to get the variable's value/description
-                        var_value = None
-                        if hasattr(var_child.value, 'end_mark'):
-                            # Could extract default value here if needed
-                            var_value = ""
-                        variables[var_name] = var_value
-        
-        return variables
+        return node.variables if node.variables else {}
 
     def _compose_all(self, loader):
         try:
