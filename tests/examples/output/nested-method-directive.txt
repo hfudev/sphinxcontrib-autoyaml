@@ -1,0 +1,14 @@
+Test
+****
+
+server()
+
+   Server configuration section.
+
+   enable_nginx()
+
+      Enable Nginx web server.
+
+   port()
+
+      Set the port number for the web server.
