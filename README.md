@@ -1,44 +1,47 @@
 # sphinxcontrib-autoyaml
 
-This Sphinx autodoc extension documents YAML files from comments. Documentation
-is returned as reST definitions, e.g.:
+This Sphinx autodoc extension documents YAML files from comments.
+
+## Output Format
+
+Each YAML key is rendered as:
+1. **Section heading** (H2/H3) - appears in TOC/sidebar
+2. **Function directive** - for cross-referencing
+3. **Parameters** - extracted from `variables` section with default values
+
+### Example
 
 This document:
 
 ```yaml
 ###
-# Enable Nginx web server.
-enable_nginx: true
-
-###
-# Enable Varnish caching proxy.
-enable_varnish: true
+# Deploy documentation to production server.
+deploy_docs_production:
+  stage: post_deploy
+  variables:
+    TYPE: "preview"
+    DOCS_DEPLOY_KEY: "$PROD_KEY"
 ```
 
-would be turned into text:
+would be rendered as:
 
-```rst
-enable_nginx
-
-   Enable Nginx web server.
-
-enable_varnish
-
-   Enable Varnish caching proxy.
+**In TOC/Sidebar:**
+```
+deploy_docs_production
 ```
 
-Alternatively, with `autoyaml_use_method_directive = True`, YAML keys can be
-rendered as Sphinx `.. method::` directives, allowing them to be cross-referenced
-and appear in the domain index:
-
+**On Page:**
 ```rst
-.. method:: enable_nginx
+deploy_docs_production
+^^^^^^^^^^^^^^^^^^^^^^
 
-   Enable Nginx web server.
+deploy_docs_production()
 
-.. method:: enable_varnish
-
-   Enable Varnish caching proxy.
+   Deploy documentation to production server.
+   
+   Parameters:
+      • TYPE -- (default: "preview")
+      • DOCS_DEPLOY_KEY -- (default: "$PROD_KEY")
 ```
 
 See `tests/examples/output/*.yml` and `tests/examples/output/*.txt` for
@@ -77,73 +80,74 @@ autoyaml_doc_delimiter = "###"                 # Default: "###"
 autoyaml_comment = "#"                         # Default: "#"
 autoyaml_level = 1                             # Default: 1
 autoyaml_safe_loader = False                   # Default: False
-autoyaml_use_method_directive = False          # Default: False
 ```
 
-### Configuration Options Explained
+### Configuration Options
 
 - **`autoyaml_root`**: Directory path (relative to conf.py) where YAML files are located
 - **`autoyaml_doc_delimiter`**: Character(s) that start a documentation comment
 - **`autoyaml_comment`**: Character(s) that start regular comments
 - **`autoyaml_level`**: How many levels deep to parse nested structures (0 = unlimited)
 - **`autoyaml_safe_loader`**: Whether to use YAML SafeLoader for security
-- **`autoyaml_use_method_directive`**: Render YAML keys as `.. method::` directives instead of definition lists
 
-### Method Directive Mode
+## Features
 
-When `autoyaml_use_method_directive` is set to `True` in your `conf.py`, YAML keys are rendered as
-Sphinx `.. method::` directives instead of definition list terms. This provides
-several advantages:
+### Automatic TOC Integration
 
-1. **Cross-referencing**: Keys can be referenced from other parts of documentation
-2. **Domain index**: Keys appear in the Python domain index
-3. **Better integration**: Works with Sphinx's standard documentation tools
+YAML keys automatically appear in the table of contents as section headings. No manual RST structure needed!
 
-To enable this mode, add to your `conf.py`:
+### Function Directives
 
-```python
-autoyaml_use_method_directive = True
+Each YAML key gets a `.. function::` directive for cross-referencing:
+
+```rst
+See :func:`deploy_docs_production` for details.
 ```
 
-In this mode, you can use standard Sphinx cross-reference syntax in your YAML
-comments, such as `:envvar:`MY_VAR`` to reference environment variables.
+### Parameter Extraction
 
-Example:
+Variables defined in a YAML `variables` section are automatically extracted as function parameters with default values:
 
 ```yaml
 ###
-# API configuration
-api:
-  ###
-  # The API key to use. Configure via :envvar:`API_KEY`.
-  api_key: "default"
+# Deploy documentation
+deploy_docs_production:
+  variables:
+    TYPE: "preview"
+    DEPLOY_KEY: "$PROD_KEY"
 ```
 
-This will generate:
+Renders as:
 
 ```rst
-.. method:: api
+Parameters:
+   • TYPE -- (default: "preview")
+   • DEPLOY_KEY -- (default: "$PROD_KEY")
+```
 
-   API configuration
+### Cross-References
 
-   .. method:: api_key
+You can use standard Sphinx cross-reference syntax in your YAML comments:
 
-      The API key to use. Configure via :envvar:`API_KEY`.
+```yaml
+###
+# Configure via :envvar:`API_KEY` environment variable.
+api_config:
+  key: "default"
 ```
 
 ## Usage
 
-You can use the `autoyaml` directive in your reStructuredText files to extract and document
-YAML files:
+Use the `autoyaml` directive in your reStructuredText files:
 
 ```rst
-Some title
-==========
+CI/CD Pipeline
+==============
 
-Documenting single YAML file.
-
-.. autoyaml:: some_yml_file.yml
+.. autoyaml:: gitlab-ci.yml
 ```
+
+This will generate section headings for each YAML key, making them automatically appear in your documentation's table of contents and sidebar navigation.
 
 ## Caveats
 
