@@ -144,7 +144,7 @@ class AutoYAMLDirective(Directive):
             return self._generate_documentation_with_method_directive(tree)
         else:
             return self._generate_documentation_with_definition_list(tree)
-    
+
     def _generate_documentation_with_definition_list(self, tree):
         """Original implementation using definition lists."""
         unvisited = [tree]
