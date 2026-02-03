@@ -1,7 +1,8 @@
 Test
 ****
 
-key
+key()
+
    comment continues to next line
 
    Forced newline.

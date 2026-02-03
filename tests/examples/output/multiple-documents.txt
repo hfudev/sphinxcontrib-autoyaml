@@ -1,11 +1,14 @@
 Test
 ****
 
-key
+key()
+
    comment
 
-key1
+key1()
+
    comment
 
-key
+key()
+
    comment

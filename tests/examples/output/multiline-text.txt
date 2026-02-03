@@ -1,5 +1,6 @@
 Test
 ****
 
-key1
+key1()
+
    Comment for key1

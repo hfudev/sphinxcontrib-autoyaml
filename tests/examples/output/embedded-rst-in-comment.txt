@@ -1,7 +1,8 @@
 Test
 ****
 
-key
+key()
+
    comment
 
       - property1: "value1"

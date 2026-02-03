@@ -25,9 +25,12 @@ class TreeNode:
         self.comments = comments
         if value is None:
             self.comment = None
+            self.original_comment = None
         else:
             # Flow-style entries may attempt to incorrectly reuse comments
             self.comment = self.comments.pop(self.value.start_mark.line + 1, None)
+            # Save the original comment for root-level keys before it gets overwritten by children
+            self.original_comment = self.comment
 
     def add_child(self, value):
         node = TreeNode(value, self.comments, self)
@@ -149,25 +152,88 @@ class AutoYAMLDirective(Directive):
             if node.parent is None or node.comment is None:
                 unvisited.pop()
                 continue
-            with switch_source_input(self.state, node.comment):
-                definition = nodes.definition()
-                if isinstance(node.comment, ViewList):
-                    self.state.nested_parse(node.comment, 0, definition)
-                else:
-                    definition += node.comment
-                node.comment = nodes.definition_list_item(
-                    "",
-                    nodes.term("", node.value.value),
-                    definition,
-                )
-                if node.parent.comment is None:
-                    node.parent.comment = nodes.definition_list()
-                elif not isinstance(node.parent.comment, nodes.definition_list):
-                    with switch_source_input(self.state, node.parent.comment):
-                        dlist = nodes.definition_list()
-                        self.state.nested_parse(node.parent.comment, 0, dlist)
-                        node.parent.comment = dlist
-                node.parent.comment += node.comment
+            
+            # Check if this is a root-level key
+            is_root_level = node.parent.parent is None
+            
+            if is_root_level:
+                # Generate .. function:: directive for root-level keys
+                # Use original_comment for the function description
+                original_comment = node.original_comment
+                children_docs = node.comment if isinstance(node.comment, nodes.definition_list) else None
+                
+                with switch_source_input(self.state, original_comment if original_comment else node.comment):
+                    # Create a ViewList for the function directive
+                    function_lines = ViewList()
+                    # Get the source file and line number from the original comment
+                    if isinstance(original_comment, ViewList) and len(original_comment.items) > 0:
+                        source_file, first_line = original_comment.items[0]
+                    else:
+                        source_file = ""
+                        first_line = 0
+                    
+                    function_lines.append(f".. function:: {node.value.value}", source_file, first_line)
+                    function_lines.append("", source_file, first_line)
+                    
+                    # Add comment content with proper indentation (3 spaces)
+                    if isinstance(original_comment, ViewList):
+                        for i, line in enumerate(original_comment):
+                            src, offset = original_comment.items[i]
+                            function_lines.append("   " + line, src, offset)
+                    
+                    # Parse the function directive to create the function node
+                    container = nodes.container()
+                    self.state.nested_parse(function_lines, 0, container)
+                    
+                    # If there are nested children docs, add them to the desc_content
+                    if children_docs and len(container.children) > 0:
+                        # Find the desc node (function directive node)
+                        for child in container.children:
+                            if hasattr(child, 'tagname') and child.tagname == 'desc':
+                                # Find desc_content within desc
+                                for desc_child in child.children:
+                                    if hasattr(desc_child, 'tagname') and desc_child.tagname == 'desc_content':
+                                        # Add the nested documentation to desc_content
+                                        desc_child += children_docs
+                                        break
+                                break
+                    
+                    node.comment = container
+                    
+                    # Accumulate root-level items in a list
+                    if node.parent.comment is None:
+                        node.parent.comment = []
+                    if not isinstance(node.parent.comment, list):
+                        # Convert to list if needed
+                        node.parent.comment = [node.parent.comment]
+                    node.parent.comment.append(node.comment)
+            else:
+                # Keep existing definition list behavior for nested keys
+                with switch_source_input(self.state, node.comment):
+                    definition = nodes.definition()
+                    if isinstance(node.comment, ViewList):
+                        self.state.nested_parse(node.comment, 0, definition)
+                    else:
+                        definition += node.comment
+                    node.comment = nodes.definition_list_item(
+                        "",
+                        nodes.term("", node.value.value),
+                        definition,
+                    )
+                    if node.parent.comment is None:
+                        node.parent.comment = nodes.definition_list()
+                    elif not isinstance(node.parent.comment, nodes.definition_list):
+                        # Check if parent is a root-level key (will be converted to function directive)
+                        if node.parent.parent.parent is None:
+                            # Parent is root-level, don't convert its ViewList - just create new definition_list
+                            node.parent.comment = nodes.definition_list()
+                        else:
+                            # Parent is nested, convert its ViewList to definition_list
+                            with switch_source_input(self.state, node.parent.comment):
+                                dlist = nodes.definition_list()
+                                self.state.nested_parse(node.parent.comment, 0, dlist)
+                                node.parent.comment = dlist
+                    node.parent.comment += node.comment
             unvisited.pop()
         return tree.comment
 
@@ -189,7 +255,12 @@ class AutoYAMLDirective(Directive):
         for doc in self._compose_all(Loader(source)):
             docs = self._generate_documentation(self._parse_document(doc, comments))
             if docs is not None:
-                yield docs
+                # Handle both lists (for root-level items) and single nodes (for nested items)
+                if isinstance(docs, list):
+                    for item in docs:
+                        yield item
+                else:
+                    yield docs
 
 
 def setup(app):

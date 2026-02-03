@@ -1,7 +1,8 @@
 Test
 ****
 
-key
+key()
+
    key1
       comment - documented key in undocumented mapping
 
