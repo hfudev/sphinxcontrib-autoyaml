@@ -47,46 +47,63 @@ more examples.
 `autoyaml` will take into account only comments which first line starts with
 `autoyaml_doc_delimiter`.
 
-## Usage
+## Installing
 
-You can use `autoyaml` directive, where you want to extract comments
-from YAML file, e.g.:
+Issue command:
 
-```rst
-Some title
-==========
-
-Documenting single YAML file.
-
-.. autoyaml:: some_yml_file.yml
+```sh
+pip install sphinxcontrib-autoyaml
 ```
 
-## Options
+And add the extension in your Sphinx project's ``conf.py`` file:
 
 ```python
-# Look for YAML files relatively to this directory.
-autoyaml_root = ".."
-# Character(s) which start a documentation comment.
-autoyaml_doc_delimiter = "###"
-# Comment start character(s).
-autoyaml_comment = "#"
-# Parse comments from nested structures n-levels deep.
-autoyaml_level = 1
-# Whether to use YAML SafeLoader
-autoyaml_safe_loader = False
-# Use method directives instead of definition lists (default: False)
-autoyaml_use_method_directive = False
+extensions = ["sphinxcontrib.autoyaml"]
 ```
+
+## Configuration
+
+All configuration options are set in your Sphinx project's ``conf.py`` file. After adding the extension to the ``extensions`` list, you can configure the extension by adding any of the options below:
+
+```python
+# conf.py
+
+# Add the extension
+extensions = ["sphinxcontrib.autoyaml"]
+
+# Configure autoyaml (all options are optional)
+autoyaml_root = ".."                           # Default: ".."
+autoyaml_doc_delimiter = "###"                 # Default: "###"
+autoyaml_comment = "#"                         # Default: "#"
+autoyaml_level = 1                             # Default: 1
+autoyaml_safe_loader = False                   # Default: False
+autoyaml_use_method_directive = False          # Default: False
+```
+
+### Configuration Options Explained
+
+- **`autoyaml_root`**: Directory path (relative to conf.py) where YAML files are located
+- **`autoyaml_doc_delimiter`**: Character(s) that start a documentation comment
+- **`autoyaml_comment`**: Character(s) that start regular comments
+- **`autoyaml_level`**: How many levels deep to parse nested structures (0 = unlimited)
+- **`autoyaml_safe_loader`**: Whether to use YAML SafeLoader for security
+- **`autoyaml_use_method_directive`**: Render YAML keys as `.. method::` directives instead of definition lists
 
 ### Method Directive Mode
 
-When `autoyaml_use_method_directive` is set to `True`, YAML keys are rendered as
+When `autoyaml_use_method_directive` is set to `True` in your `conf.py`, YAML keys are rendered as
 Sphinx `.. method::` directives instead of definition list terms. This provides
 several advantages:
 
 1. **Cross-referencing**: Keys can be referenced from other parts of documentation
 2. **Domain index**: Keys appear in the Python domain index
 3. **Better integration**: Works with Sphinx's standard documentation tools
+
+To enable this mode, add to your `conf.py`:
+
+```python
+autoyaml_use_method_directive = True
+```
 
 In this mode, you can use standard Sphinx cross-reference syntax in your YAML
 comments, such as `:envvar:`MY_VAR`` to reference environment variables.
@@ -114,18 +131,18 @@ This will generate:
       The API key to use. Configure via :envvar:`API_KEY`.
 ```
 
-## Installing
+## Usage
 
-Issue command:
+You can use the `autoyaml` directive in your reStructuredText files to extract and document
+YAML files:
 
-```sh
-pip install sphinxcontrib-autoyaml
-```
+```rst
+Some title
+==========
 
-And add extension in your project's ``conf.py``:
+Documenting single YAML file.
 
-```python
-extensions = ["sphinxcontrib.autoyaml"]
+.. autoyaml:: some_yml_file.yml
 ```
 
 ## Caveats
