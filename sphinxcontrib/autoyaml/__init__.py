@@ -140,49 +140,9 @@ class AutoYAMLDirective(Directive):
         return tree
 
     def _generate_documentation(self, tree):
-        if self.config.autoyaml_use_method_directive:
-            return self._generate_documentation_with_method_directive(tree)
-        else:
-            return self._generate_documentation_with_definition_list(tree)
-
-    def _generate_documentation_with_definition_list(self, tree):
-        """Original implementation using definition lists."""
+        """Generate documentation using sections and function directives."""
+        sections = []
         unvisited = [tree]
-        while len(unvisited) > 0:
-            node = unvisited[-1]
-            if len(node.children) > 0:
-                unvisited.append(node.remove_child())
-                continue
-            if node.parent is None or node.comment is None:
-                unvisited.pop()
-                continue
-            with switch_source_input(self.state, node.comment):
-                definition = nodes.definition()
-                if isinstance(node.comment, ViewList):
-                    self.state.nested_parse(node.comment, 0, definition)
-                else:
-                    definition += node.comment
-                node.comment = nodes.definition_list_item(
-                    "",
-                    nodes.term("", node.value.value),
-                    definition,
-                )
-                if node.parent.comment is None:
-                    node.parent.comment = nodes.definition_list()
-                elif not isinstance(node.parent.comment, nodes.definition_list):
-                    with switch_source_input(self.state, node.parent.comment):
-                        dlist = nodes.definition_list()
-                        self.state.nested_parse(node.parent.comment, 0, dlist)
-                        node.parent.comment = dlist
-                node.parent.comment += node.comment
-            unvisited.pop()
-        return tree.comment
-
-    def _generate_documentation_with_method_directive(self, tree):
-        """New implementation using method directives."""
-        unvisited = [tree]
-        # Track which nodes have been converted to method directives
-        converted = set()
         
         while len(unvisited) > 0:
             node = unvisited[-1]
@@ -193,78 +153,113 @@ class AutoYAMLDirective(Directive):
                 unvisited.pop()
                 continue
             
-            # Skip creating method directive if already converted, but still append to parent
-            if id(node) not in converted:
-                # Build ViewList for method directive
-                method_viewlist = ViewList()
-                
-                # Get source info from the original comment
-                if isinstance(node.comment, ViewList):
-                    source_file = node.comment.source(0) if len(node.comment) > 0 else "<autoyaml>"
-                else:
-                    source_file = "<autoyaml>"
-                
-                # Add method directive line
-                line_num = 0
-                method_viewlist.append(f".. method:: {node.value.value}", source_file, line_num)
-                method_viewlist.append("", source_file, line_num)
-                
-                # Add comment content with proper indentation
-                if isinstance(node.comment, ViewList):
-                    for i, line in enumerate(node.comment):
-                        # Add 3 spaces for indentation (standard for directive content)
-                        src, lineno = node.comment.info(i)
-                        method_viewlist.append(f"   {line}", src, lineno)
-                
-                # Store as ViewList for now
-                node.comment = method_viewlist
-                converted.add(id(node))
+            # Create a section for this YAML key
+            section = nodes.section()
+            section['ids'] = [nodes.make_id(node.value.value)]
             
-            # Get source file for blank lines
+            # Add title heading
+            title_text = node.value.value
+            title = nodes.title()
+            title += nodes.Text(title_text)
+            section += title
+            
+            # Build ViewList for the function directive
+            viewlist = ViewList()
+            
+            # Get source info from the original comment
             if isinstance(node.comment, ViewList):
                 source_file = node.comment.source(0) if len(node.comment) > 0 else "<autoyaml>"
             else:
                 source_file = "<autoyaml>"
             
-            # Handle parent's comment
-            if node.parent.comment is None:
-                node.parent.comment = ViewList()
-            elif isinstance(node.parent.comment, ViewList) and id(node.parent) not in converted and node.parent.value is not None:
-                # Parent has its own doc comment and hasn't been converted yet. Convert it to method directive.
-                parent_method = ViewList()
-                parent_source = node.parent.comment.source(0) if len(node.parent.comment) > 0 else "<autoyaml>"
-                parent_method.append(f".. method:: {node.parent.value.value}", parent_source, 0)
-                parent_method.append("", parent_source, 0)
-                # Add parent's documentation
-                for i, line in enumerate(node.parent.comment):
-                    src, lineno = node.parent.comment.info(i)
-                    parent_method.append(f"   {line}", src, lineno)
-                # Blank line before children
-                parent_method.append("", parent_source, 0)
-                node.parent.comment = parent_method
-                converted.add(id(node.parent))
+            line_num = 0
             
-            # Append this node's method directive to parent's ViewList
-            # Child methods need to be indented by 3 spaces to be inside parent method
-            if isinstance(node.parent.comment, ViewList):
+            # Add function directive
+            viewlist.append(f".. function:: {node.value.value}", source_file, line_num)
+            viewlist.append("", source_file, line_num)
+            
+            # Add comment content with proper indentation
+            if isinstance(node.comment, ViewList):
                 for i, line in enumerate(node.comment):
                     src, lineno = node.comment.info(i)
-                    # Indent by 3 spaces if parent has a value (not root)
-                    if node.parent.value is not None:
-                        node.parent.comment.append(f"   {line}", src, lineno)
-                    else:
-                        node.parent.comment.append(line, src, lineno)
-                node.parent.comment.append("", source_file, 0)  # Blank line after method
+                    viewlist.append(f"   {line}", src, lineno)
+            
+            # Extract variables/parameters from the node
+            variables_info = self._extract_variables(node)
+            if variables_info:
+                viewlist.append("", source_file, line_num)
+                for var_name, var_value in variables_info.items():
+                    # Add parameter documentation
+                    param_line = f"   :param {var_name}:"
+                    if var_value:
+                        if isinstance(var_value, str):
+                            param_line += f" {var_value}"
+                    viewlist.append(param_line, source_file, line_num)
+            
+            # Parse the ViewList content into the section
+            with switch_source_input(self.state, viewlist):
+                self.state.nested_parse(viewlist, 0, section)
+            
+            # Store the section
+            node.comment = section
+            
+            # Accumulate sections in parent
+            if node.parent.comment is None:
+                node.parent.comment = []
+            elif isinstance(node.parent.comment, ViewList) and node.parent.value is not None:
+                # Parent has its own comment - create section for it too
+                parent_section = nodes.section()
+                parent_section['ids'] = [nodes.make_id(node.parent.value.value)]
+                
+                parent_title_text = node.parent.value.value
+                parent_title = nodes.title()
+                parent_title += nodes.Text(parent_title_text)
+                parent_section += parent_title
+                
+                # Add parent's function directive
+                parent_viewlist = ViewList()
+                parent_source = node.parent.comment.source(0) if len(node.parent.comment) > 0 else "<autoyaml>"
+                parent_viewlist.append(f".. function:: {node.parent.value.value}", parent_source, 0)
+                parent_viewlist.append("", parent_source, 0)
+                
+                for i, line in enumerate(node.parent.comment):
+                    src, lineno = node.parent.comment.info(i)
+                    parent_viewlist.append(f"   {line}", src, lineno)
+                
+                with switch_source_input(self.state, parent_viewlist):
+                    self.state.nested_parse(parent_viewlist, 0, parent_section)
+                
+                node.parent.comment = [parent_section]
+            
+            if isinstance(node.parent.comment, list):
+                node.parent.comment.append(section)
             
             unvisited.pop()
         
-        # Parse the accumulated ViewList
-        if tree.comment is not None and isinstance(tree.comment, ViewList):
-            with switch_source_input(self.state, tree.comment):
-                parsed_nodes = nodes.container()
-                self.state.nested_parse(tree.comment, 0, parsed_nodes)
-                return parsed_nodes
-        return tree.comment
+        # Return all sections
+        if isinstance(tree.comment, list):
+            return tree.comment
+        return []
+    
+    def _extract_variables(self, node):
+        """Extract variables from a YAML node to create parameter documentation."""
+        variables = {}
+        
+        # Look for a 'variables' child node
+        for child in node.children:
+            if child.value and hasattr(child.value, 'value') and child.value.value == 'variables':
+                # This is the variables section
+                for var_child in child.children:
+                    if var_child.value and hasattr(var_child.value, 'value'):
+                        var_name = var_child.value.value
+                        # Try to get the variable's value/description
+                        var_value = None
+                        if hasattr(var_child.value, 'end_mark'):
+                            # Could extract default value here if needed
+                            var_value = ""
+                        variables[var_name] = var_value
+        
+        return variables
 
     def _compose_all(self, loader):
         try:
@@ -284,7 +279,13 @@ class AutoYAMLDirective(Directive):
         for doc in self._compose_all(Loader(source)):
             docs = self._generate_documentation(self._parse_document(doc, comments))
             if docs is not None:
-                yield docs
+                # If docs is a list (new approach), yield each node individually
+                if isinstance(docs, list):
+                    for node in docs:
+                        yield node
+                else:
+                    # Old-style single node
+                    yield docs
 
 
 def setup(app):
@@ -295,4 +296,3 @@ def setup(app):
     app.add_config_value("autoyaml_level", 1, "env")
     # Set to false to preserve backward compatibility.
     app.add_config_value("autoyaml_safe_loader", False, "env")
-    app.add_config_value("autoyaml_use_method_directive", False, "env")
