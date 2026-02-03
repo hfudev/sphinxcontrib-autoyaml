@@ -27,6 +27,20 @@ enable_varnish
    Enable Varnish caching proxy.
 ```
 
+Alternatively, with `autoyaml_use_method_directive = True`, YAML keys can be
+rendered as Sphinx `.. method::` directives, allowing them to be cross-referenced
+and appear in the domain index:
+
+```rst
+.. method:: enable_nginx
+
+   Enable Nginx web server.
+
+.. method:: enable_varnish
+
+   Enable Varnish caching proxy.
+```
+
 See `tests/examples/output/*.yml` and `tests/examples/output/*.txt` for
 more examples.
 
@@ -60,6 +74,44 @@ autoyaml_comment = "#"
 autoyaml_level = 1
 # Whether to use YAML SafeLoader
 autoyaml_safe_loader = False
+# Use method directives instead of definition lists (default: False)
+autoyaml_use_method_directive = False
+```
+
+### Method Directive Mode
+
+When `autoyaml_use_method_directive` is set to `True`, YAML keys are rendered as
+Sphinx `.. method::` directives instead of definition list terms. This provides
+several advantages:
+
+1. **Cross-referencing**: Keys can be referenced from other parts of documentation
+2. **Domain index**: Keys appear in the Python domain index
+3. **Better integration**: Works with Sphinx's standard documentation tools
+
+In this mode, you can use standard Sphinx cross-reference syntax in your YAML
+comments, such as `:envvar:`MY_VAR`` to reference environment variables.
+
+Example:
+
+```yaml
+###
+# API configuration
+api:
+  ###
+  # The API key to use. Configure via :envvar:`API_KEY`.
+  api_key: "default"
+```
+
+This will generate:
+
+```rst
+.. method:: api
+
+   API configuration
+
+   .. method:: api_key
+
+      The API key to use. Configure via :envvar:`API_KEY`.
 ```
 
 ## Installing
