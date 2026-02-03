@@ -1,0 +1,15 @@
+Test
+****
+
+deploy_docs_production()
+
+   Deploy documentation to production server.
+
+   Deploys the full built documentation to the production server for
+   protected branches and tags (master, release branches, and version
+   tags).
+
+   **Variables**
+
+   "DOCS_PROD_DEPLOY_KEY" "DOCS_PROD_SERVER" "DOCS_PROD_SERVER_USER"
+   "DOCS_PROD_PATH"

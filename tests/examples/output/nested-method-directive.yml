@@ -1,0 +1,9 @@
+###
+# Server configuration section.
+server:
+  ###
+  # Enable Nginx web server.
+  enable_nginx: true
+  ###
+  # Set the port number for the web server.
+  port: 8080

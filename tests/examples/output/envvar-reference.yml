@@ -1,0 +1,6 @@
+###
+# The API key to use. This should be set via :envvar:`API_KEY` environment variable.
+api_key: "default"
+###
+# The database connection string. Configure using :envvar:`DATABASE_URL`.
+database_url: "sqlite:///db.sqlite"

@@ -90,6 +90,11 @@ if __name__ == "__main__":
     confoverrides = defaultdict(dict)
     confoverrides["capped1"] = {"autoyaml_level": 1}
     confoverrides["capped2"] = {"autoyaml_level": 2}
+    # Method directive tests
+    confoverrides["simple-method-directive"] = {"autoyaml_use_method_directive": True}
+    confoverrides["nested-method-directive"] = {"autoyaml_use_method_directive": True}
+    confoverrides["envvar-reference"] = {"autoyaml_use_method_directive": True}
+    confoverrides["gitlab-ci-example"] = {"autoyaml_use_method_directive": True}
     for text_example in text_examples:
         filename, _ = os.path.splitext(text_example)
         test_name = filename.replace("-", "_")
