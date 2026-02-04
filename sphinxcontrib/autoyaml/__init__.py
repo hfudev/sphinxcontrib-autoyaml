@@ -28,6 +28,9 @@ class TreeNode:
         else:
             # Flow-style entries may attempt to incorrectly reuse comments
             self.comment = self.comments.pop(self.value.start_mark.line + 1, None)
+            # Save the original comment for root-level keys before it gets overwritten by children
+            # (only used when autoyaml_root_as_function is enabled)
+            self.original_comment = self.comment
 
     def add_child(self, value):
         node = TreeNode(value, self.comments, self)
@@ -140,6 +143,9 @@ class AutoYAMLDirective(Directive):
         return tree
 
     def _generate_documentation(self, tree):
+        # Check if root keys should be rendered as function directives
+        use_function_directives = self.config.autoyaml_root_as_function
+        
         unvisited = [tree]
         while len(unvisited) > 0:
             node = unvisited[-1]
@@ -149,25 +155,89 @@ class AutoYAMLDirective(Directive):
             if node.parent is None or node.comment is None:
                 unvisited.pop()
                 continue
-            with switch_source_input(self.state, node.comment):
-                definition = nodes.definition()
-                if isinstance(node.comment, ViewList):
-                    self.state.nested_parse(node.comment, 0, definition)
-                else:
-                    definition += node.comment
-                node.comment = nodes.definition_list_item(
-                    "",
-                    nodes.term("", node.value.value),
-                    definition,
-                )
-                if node.parent.comment is None:
-                    node.parent.comment = nodes.definition_list()
-                elif not isinstance(node.parent.comment, nodes.definition_list):
-                    with switch_source_input(self.state, node.parent.comment):
-                        dlist = nodes.definition_list()
-                        self.state.nested_parse(node.parent.comment, 0, dlist)
-                        node.parent.comment = dlist
-                node.parent.comment += node.comment
+            
+            # Check if this is a root-level key
+            is_root_level = node.parent.parent is None
+            
+            if use_function_directives and is_root_level:
+                # Generate .. function:: directive for root-level keys
+                # Use original_comment for the function description
+                original_comment = node.original_comment
+                children_docs = node.comment if isinstance(node.comment, nodes.definition_list) else None
+                
+                with switch_source_input(self.state, original_comment if original_comment else node.comment):
+                    # Create a ViewList for the function directive
+                    function_lines = ViewList()
+                    # Get the source file and line number from the original comment
+                    if isinstance(original_comment, ViewList) and len(original_comment.items) > 0:
+                        source_file, first_line = original_comment.items[0]
+                    else:
+                        source_file = ""
+                        first_line = 0
+                    
+                    function_lines.append(f".. function:: {node.value.value}", source_file, first_line)
+                    function_lines.append("", source_file, first_line)
+                    
+                    # Add comment content with proper indentation (3 spaces)
+                    if isinstance(original_comment, ViewList):
+                        for i, line in enumerate(original_comment):
+                            src, offset = original_comment.items[i]
+                            function_lines.append("   " + line, src, offset)
+                    
+                    # Parse the function directive to create the function node
+                    container = nodes.container()
+                    self.state.nested_parse(function_lines, 0, container)
+                    
+                    # If there are nested children docs, add them to the desc_content
+                    if children_docs and len(container.children) > 0:
+                        # Find the desc node (function directive node)
+                        for child in container.children:
+                            if hasattr(child, 'tagname') and child.tagname == 'desc':
+                                # Find desc_content within desc
+                                for desc_child in child.children:
+                                    if hasattr(desc_child, 'tagname') and desc_child.tagname == 'desc_content':
+                                        # Add the nested documentation to desc_content
+                                        desc_child += children_docs
+                                        break
+                                break
+                    
+                    node.comment = container
+                    
+                    # Accumulate root-level items in a list
+                    if node.parent.comment is None:
+                        node.parent.comment = []
+                    elif not isinstance(node.parent.comment, list):
+                        # Convert to list, preserving existing item
+                        node.parent.comment = [node.parent.comment]
+                    node.parent.comment.append(node.comment)
+            else:
+                # Use definition list behavior (original behavior or for nested keys)
+                with switch_source_input(self.state, node.comment):
+                    definition = nodes.definition()
+                    if isinstance(node.comment, ViewList):
+                        self.state.nested_parse(node.comment, 0, definition)
+                    else:
+                        definition += node.comment
+                    node.comment = nodes.definition_list_item(
+                        "",
+                        nodes.term("", node.value.value),
+                        definition,
+                    )
+                    if node.parent.comment is None:
+                        node.parent.comment = nodes.definition_list()
+                    elif not isinstance(node.parent.comment, nodes.definition_list):
+                        # Check if parent is a root-level key and function directives are enabled
+                        # Need to check parent.parent exists before accessing parent.parent.parent
+                        if use_function_directives and node.parent.parent and node.parent.parent.parent is None:
+                            # Parent is root-level with function directives, don't convert its ViewList
+                            node.parent.comment = nodes.definition_list()
+                        else:
+                            # Parent is nested or function directives disabled, convert its ViewList to definition_list
+                            with switch_source_input(self.state, node.parent.comment):
+                                dlist = nodes.definition_list()
+                                self.state.nested_parse(node.parent.comment, 0, dlist)
+                                node.parent.comment = dlist
+                    node.parent.comment += node.comment
             unvisited.pop()
         return tree.comment
 
@@ -189,7 +259,13 @@ class AutoYAMLDirective(Directive):
         for doc in self._compose_all(Loader(source)):
             docs = self._generate_documentation(self._parse_document(doc, comments))
             if docs is not None:
-                yield docs
+                # Handle both lists (for root-level items with function directives) 
+                # and single nodes (for nested items or when function directives disabled)
+                if isinstance(docs, list):
+                    for item in docs:
+                        yield item
+                else:
+                    yield docs
 
 
 def setup(app):
@@ -200,3 +276,6 @@ def setup(app):
     app.add_config_value("autoyaml_level", 1, "env")
     # Set to false to preserve backward compatibility.
     app.add_config_value("autoyaml_safe_loader", False, "env")
+    # Render root keys as function directives instead of definition lists.
+    # Set to false to preserve backward compatibility.
+    app.add_config_value("autoyaml_root_as_function", False, "env")
