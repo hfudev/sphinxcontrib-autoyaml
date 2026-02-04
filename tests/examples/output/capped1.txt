@@ -1,6 +1,5 @@
 Test
 ****
 
-key()
-
+key
    comment

@@ -25,11 +25,11 @@ class TreeNode:
         self.comments = comments
         if value is None:
             self.comment = None
-            self.original_comment = None
         else:
             # Flow-style entries may attempt to incorrectly reuse comments
             self.comment = self.comments.pop(self.value.start_mark.line + 1, None)
             # Save the original comment for root-level keys before it gets overwritten by children
+            # (only used when autoyaml_root_as_function is enabled)
             self.original_comment = self.comment
 
     def add_child(self, value):
@@ -143,6 +143,9 @@ class AutoYAMLDirective(Directive):
         return tree
 
     def _generate_documentation(self, tree):
+        # Check if root keys should be rendered as function directives
+        use_function_directives = self.config.autoyaml_root_as_function
+        
         unvisited = [tree]
         while len(unvisited) > 0:
             node = unvisited[-1]
@@ -156,7 +159,7 @@ class AutoYAMLDirective(Directive):
             # Check if this is a root-level key
             is_root_level = node.parent.parent is None
             
-            if is_root_level:
+            if use_function_directives and is_root_level:
                 # Generate .. function:: directive for root-level keys
                 # Use original_comment for the function description
                 original_comment = node.original_comment
@@ -208,7 +211,7 @@ class AutoYAMLDirective(Directive):
                         node.parent.comment = [node.parent.comment]
                     node.parent.comment.append(node.comment)
             else:
-                # Keep existing definition list behavior for nested keys
+                # Use definition list behavior (original behavior or for nested keys)
                 with switch_source_input(self.state, node.comment):
                     definition = nodes.definition()
                     if isinstance(node.comment, ViewList):
@@ -223,13 +226,13 @@ class AutoYAMLDirective(Directive):
                     if node.parent.comment is None:
                         node.parent.comment = nodes.definition_list()
                     elif not isinstance(node.parent.comment, nodes.definition_list):
-                        # Check if parent is a root-level key (will be converted to function directive)
+                        # Check if parent is a root-level key and function directives are enabled
                         # Need to check parent.parent exists before accessing parent.parent.parent
-                        if node.parent.parent and node.parent.parent.parent is None:
-                            # Parent is root-level, don't convert its ViewList - just create new definition_list
+                        if use_function_directives and node.parent.parent and node.parent.parent.parent is None:
+                            # Parent is root-level with function directives, don't convert its ViewList
                             node.parent.comment = nodes.definition_list()
                         else:
-                            # Parent is nested, convert its ViewList to definition_list
+                            # Parent is nested or function directives disabled, convert its ViewList to definition_list
                             with switch_source_input(self.state, node.parent.comment):
                                 dlist = nodes.definition_list()
                                 self.state.nested_parse(node.parent.comment, 0, dlist)
@@ -256,7 +259,8 @@ class AutoYAMLDirective(Directive):
         for doc in self._compose_all(Loader(source)):
             docs = self._generate_documentation(self._parse_document(doc, comments))
             if docs is not None:
-                # Handle both lists (for root-level items) and single nodes (for nested items)
+                # Handle both lists (for root-level items with function directives) 
+                # and single nodes (for nested items or when function directives disabled)
                 if isinstance(docs, list):
                     for item in docs:
                         yield item
@@ -272,3 +276,6 @@ def setup(app):
     app.add_config_value("autoyaml_level", 1, "env")
     # Set to false to preserve backward compatibility.
     app.add_config_value("autoyaml_safe_loader", False, "env")
+    # Render root keys as function directives instead of definition lists.
+    # Set to false to preserve backward compatibility.
+    app.add_config_value("autoyaml_root_as_function", False, "env")

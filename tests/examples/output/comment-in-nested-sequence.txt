@@ -1,8 +1,7 @@
 Test
 ****
 
-key1()
-
+key1
    key
       comment
 
@@ -25,7 +24,6 @@ key1()
    key
       comment
 
-key2()
-
+key2
    key
       comment
